@@ -117,14 +117,3 @@ with col2:
                 status_text.empty()
         else:
             st.warning("Please upload an image and enter your API key.")
-
-# Footer
-st.markdown("---")
-st.markdown("### 📝 Instructions")
-st.markdown("""
-1. Enter your FAL API key in the sidebar
-2. Upload an image you want to upscale
-3. Adjust advanced settings if desired
-4. Click 'Upscale Image' to process
-5. Download the result when ready
-""")
