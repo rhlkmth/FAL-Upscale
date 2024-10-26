@@ -5,6 +5,10 @@ from PIL import Image
 import requests
 from io import BytesIO
 import base64
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
 
 # Config and settings
 st.set_page_config(page_title="Image Upscaler", layout="wide")
@@ -59,22 +63,15 @@ with col2:
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
-                # Progress callback
-                def on_queue_update(update):
-                    if isinstance(update, fal_client.InProgress):
-                        for log in update.logs:
-                            status_text.text(f"Processing: {log['message']}")
-                            progress_bar.progress(0.5)
-                
                 # Process the image
                 with st.spinner("Upscaling image..."):
                     # Convert image to data URI
                     image_uri = image_to_data_uri(input_image)
                     
                     # Run upscaling
-                    result = fal_client.subscribe(
+                    result = fal.run(
                         "fal-ai/clarity-upscaler",
-                        arguments={
+                        input={
                             "image_url": image_uri,
                             "prompt": prompt,
                             "creativity": creativity,
@@ -83,15 +80,15 @@ with col2:
                             "enable_safety_checker": False,
                             "guidance_scale": 4,
                             "num_inference_steps": 18,
-                        },
-                        with_logs=True,
-                        on_queue_update=on_queue_update
+                        }
                     )
+                    
+                    logging.info(f"API Response: {result}")
                     
                     # Show result
                     if result and 'image' in result:
                         # Download and display the result
-                        response = requests.get(result['image']['url'])
+                        response = requests.get(result['image'])
                         output_image = Image.open(BytesIO(response.content))
                         st.image(output_image, caption="Upscaled Result", use_column_width=True)
                         st.success(f"New Size: {output_image.size}")
@@ -105,14 +102,17 @@ with col2:
                             file_name="upscaled_image.png",
                             mime="image/png"
                         )
+                    else:
+                        st.error("No image in the result. Please check the API response.")
                     
                     # Clear progress
                     progress_bar.empty()
                     status_text.empty()
                     
             except Exception as e:
+                logging.error(f"Error occurred: {str(e)}", exc_info=True)
                 st.error(f"Error occurred: {str(e)}")
-                st.error("Full error details:", exc_info=True)
+                st.error("Please check the logs for more details.")
                 progress_bar.empty()
                 status_text.empty()
         else:
