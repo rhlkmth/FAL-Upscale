@@ -22,7 +22,7 @@ st.title("🖼️ AI Image Upscaler")
 # Sidebar for API key
 with st.sidebar:
     st.header("Settings")
-    api_key = st.text_input("Enter FAL API Key:", type="text")
+    api_key = st.text_input("Enter FAL API Key:")
     if api_key:
         os.environ["FAL_KEY"] = api_key
     
