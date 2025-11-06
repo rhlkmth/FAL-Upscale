@@ -1,5 +1,6 @@
 import streamlit as st
 import fal_client
+from fal_client import Queued, InProgress  # Fixed import
 import os
 from PIL import Image, UnidentifiedImageError
 import requests
@@ -46,12 +47,14 @@ def describe_image(metadata):
     mode = metadata["mode"]
     return f"Dimensions: {width}×{height}px · Mode: {mode} · File Size: {size_label}"
 
+
 def image_to_data_uri(img):
     """Convert a PIL Image to a data URI."""
     buffered = BytesIO()
     img.save(buffered, format="PNG")
     img_str = base64.b64encode(buffered.getvalue()).decode()
     return f"data:image/png;base64,{img_str}"
+
 
 # Streamlit UI layout
 st.title("🖼️ AI Image Upscaler")
@@ -97,7 +100,7 @@ with col1:
             except UnidentifiedImageError:
                 st.error("The selected file is not a supported image format.")
 
-    else: # Image URL
+    else:  # Image URL
         image_url = st.text_input(
             "Paste an image URL",
             placeholder="https://example.com/photo.png",
@@ -170,7 +173,7 @@ with col2:
             "resemblance": resemblance,
             "upscale_factor": upscale_factor,
         }
-    else: # Crystal Upscaler
+    else:  # Crystal Upscaler
         st.caption(f"Model: Crystal · Scale Factor: ×{scale_factor}")
         request_summary = {
             "model": "Crystal Upscaler",
@@ -210,22 +213,25 @@ with col2:
             progress_bar = st.progress(0)
             status_text = st.empty()
 
-            queued_state = getattr(fal_client, "Queued", None)
-
             def on_queue_update(update):
-                if queued_state and isinstance(update, queued_state):
+                if isinstance(update, Queued):  # Fixed: Direct class reference
                     position = getattr(update, "position", None)
                     if position is not None:
                         status_text.info(f"Queued... {position} job(s) ahead")
                     else:
                         status_text.info("Queued... waiting for a worker")
                     progress_bar.progress(10)
-                elif isinstance(update, fal_client.InProgress):
-                    messages = [
-                        log.get("message") for log in update.logs if isinstance(log, dict)
-                    ]
+                elif isinstance(update, InProgress):  # Fixed: Direct class reference
+                    messages = []
+                    if hasattr(update, 'logs'):
+                        messages = [
+                            log.get("message") for log in update.logs 
+                            if isinstance(log, dict) and "message" in log
+                        ]
                     if messages:
                         status_text.info(f"Processing: {messages[-1]}")
+                    else:
+                        status_text.info("Processing...")
                     progress_bar.progress(55)
 
             try:
@@ -245,7 +251,7 @@ with col2:
                             "guidance_scale": 4,
                             "num_inference_steps": 18,
                         }
-                    else: # Crystal Upscaler
+                    else:  # Crystal Upscaler
                         model_id = "fal-ai/crystal-upscaler"
                         arguments = {
                             "image_url": image_uri,
@@ -291,15 +297,11 @@ with col2:
 
             except Exception as exc:
                 status_text.error("Upscaling failed.")
-                error_message = str(exc)
-                # Provide a more user-friendly message for authentication errors
-                if "No user found for Key ID and Secret" in error_message:
-                    st.error("Authentication failed. Please make sure your FAL API Key is correct and valid.")
-                else:
-                    st.error("An error occurred while processing the image.")
-                    st.error(error_message)
+                st.error("An error occurred while processing the image.")
+                st.error(f"Error details: {str(exc)}")
             finally:
                 progress_bar.empty()
+                status_text.empty()  # Fixed: Clear status text as well
 
 # Footer
 st.markdown("---")
