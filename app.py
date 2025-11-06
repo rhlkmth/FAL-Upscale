@@ -154,7 +154,7 @@ with col2:
             prompt = st.text_area("Custom Prompt", "masterpiece, best quality, highres")
         else:  # Crystal Upscaler
             scale_factor = st.slider("Scale Factor", 1, 8, 2)
-    
+
     st.header("Upscaled Result")
 
     # Display settings summary and build request
@@ -291,8 +291,13 @@ with col2:
 
             except Exception as exc:
                 status_text.error("Upscaling failed.")
-                st.error("An error occurred while processing the image.")
-                st.error(str(exc))
+                error_message = str(exc)
+                # Provide a more user-friendly message for authentication errors
+                if "No user found for Key ID and Secret" in error_message:
+                    st.error("Authentication failed. Please make sure your FAL API Key is correct and valid.")
+                else:
+                    st.error("An error occurred while processing the image.")
+                    st.error(error_message)
             finally:
                 progress_bar.empty()
 
