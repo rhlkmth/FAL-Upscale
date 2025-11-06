@@ -305,4 +305,4 @@ st.markdown("""
 3. Choose your desired upscaler model (`Crystal` for faces, `Clarity` for general use).
 4. Adjust advanced settings as needed, then click **Upscale Image**.
 5. Your enhanced result will appear below the button once processing finishes.
-""")```
+""")
