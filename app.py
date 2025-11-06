@@ -56,9 +56,77 @@ def image_to_data_uri(img):
 # Streamlit UI layout
 st.title("🖼️ AI Image Upscaler")
 
-# Sidebar for API key and settings
-with st.sidebar:
-    st.header("Settings")
+# Main content area - two columns
+col1, col2 = st.columns(2)
+
+# Track the currently selected image
+input_image = None
+input_metadata = {}
+
+# Input column
+with col1:
+    st.header("Input Image")
+    source_option = st.radio(
+        "Select image source",
+        options=["Upload", "Image URL"],
+        horizontal=True,
+    )
+
+    if source_option == "Upload":
+        uploaded_file = st.file_uploader(
+            "Choose an image...",
+            type=["png", "jpg", "jpeg", "webp"],
+            help="Supported formats: PNG, JPG, JPEG and WEBP.",
+        )
+        if uploaded_file is not None:
+            try:
+                # Read bytes into memory to avoid issues with file pointer
+                image_bytes = uploaded_file.getvalue()
+                image = Image.open(BytesIO(image_bytes))
+                image.load()
+                input_metadata = {
+                    "dimensions": image.size,
+                    "mode": image.mode,
+                    "source": uploaded_file.name,
+                    "size": len(image_bytes),
+                }
+                input_image = image.copy()
+                image.close()
+                st.image(input_image, caption="Input Preview", use_column_width=True)
+                st.caption(describe_image(input_metadata))
+            except UnidentifiedImageError:
+                st.error("The selected file is not a supported image format.")
+
+    else: # Image URL
+        image_url = st.text_input(
+            "Paste an image URL",
+            placeholder="https://example.com/photo.png",
+            help="Provide a direct link to a PNG, JPG, JPEG or WEBP image.",
+        )
+        if image_url:
+            try:
+                image_bytes = fetch_image_from_url(image_url)
+                image = Image.open(BytesIO(image_bytes))
+                image.load()
+                input_metadata = {
+                    "dimensions": image.size,
+                    "mode": image.mode,
+                    "source": image_url,
+                    "size": len(image_bytes),
+                }
+                input_image = image.copy()
+                image.close()
+                st.image(input_image, caption="Input Preview", use_column_width=True)
+                st.caption(describe_image(input_metadata))
+            except ValueError as error:
+                st.error(str(error))
+
+    if input_image is None:
+        st.info("Upload an image or provide a URL to get started.")
+
+# Output and Configuration column
+with col2:
+    st.header("Configuration")
     st.markdown(
         "Need an API key? [Generate one from the FAL dashboard](https://fal.ai/dashboard)."
     )
@@ -86,86 +154,14 @@ with st.sidebar:
             prompt = st.text_area("Custom Prompt", "masterpiece, best quality, highres")
         else:  # Crystal Upscaler
             scale_factor = st.slider("Scale Factor", 1, 8, 2)
-
-
-# Main content area - two columns
-col1, col2 = st.columns(2)
-
-# Track the currently selected image
-input_image = None
-input_metadata = {}
-
-# Input column
-with col1:
-    st.header("Input Image")
-    source_option = st.radio(
-        "Select image source",
-        options=["Upload", "Image URL"],
-        horizontal=True,
-    )
-
-    if source_option == "Upload":
-        uploaded_file = st.file_uploader(
-            "Choose an image...",
-            type=["png", "jpg", "jpeg", "webp"],
-            help="Supported formats: PNG, JPG, JPEG and WEBP.",
-        )
-        if uploaded_file is not None:
-            try:
-                image = Image.open(uploaded_file)
-                image.load()
-                input_metadata = {
-                    "dimensions": image.size,
-                    "mode": image.mode,
-                    "source": uploaded_file.name,
-                    "size": uploaded_file.size,
-                }
-                input_image = image.copy()
-                image.close()
-                st.image(input_image, caption="Input Preview", use_column_width=True)
-                st.caption(describe_image(input_metadata))
-            except UnidentifiedImageError:
-                st.error("The selected file is not a supported image format.")
-            finally:
-                uploaded_file.seek(0)
-    else:
-        image_url = st.text_input(
-            "Paste an image URL",
-            placeholder="https://example.com/photo.png",
-            help="Provide a direct link to a PNG, JPG, JPEG or WEBP image.",
-        )
-        if image_url:
-            try:
-                image_bytes = fetch_image_from_url(image_url)
-                image = Image.open(BytesIO(image_bytes))
-                image.load()
-                input_metadata = {
-                    "dimensions": image.size,
-                    "mode": image.mode,
-                    "source": image_url,
-                    "size": len(image_bytes),
-                }
-                input_image = image.copy()
-                image.close()
-                st.image(input_image, caption="Input Preview", use_column_width=True)
-                st.caption(describe_image(input_metadata))
-            except ValueError as error:
-                st.error(str(error))
-
-    if input_image is None:
-        st.info("Upload an image or provide a URL to get started.")
-
-# Output column
-with col2:
+    
     st.header("Upscaled Result")
-    if input_metadata:
-        st.caption(f"Selected image • {describe_image(input_metadata)}")
 
     # Display settings summary and build request
     request_summary = {}
     if model_choice == "Clarity Upscaler":
         st.caption(
-            f"Creativity: {creativity:.2f} · Resemblance: {resemblance:.2f} · Upscale ×{upscale_factor:.1f}"
+            f"Model: Clarity · Creativity: {creativity:.2f} · Resemblance: {resemblance:.2f} · Upscale ×{upscale_factor:.1f}"
         )
         request_summary = {
             "model": "Clarity Upscaler",
@@ -175,7 +171,7 @@ with col2:
             "upscale_factor": upscale_factor,
         }
     else: # Crystal Upscaler
-        st.caption(f"Scale Factor: ×{scale_factor}")
+        st.caption(f"Model: Crystal · Scale Factor: ×{scale_factor}")
         request_summary = {
             "model": "Crystal Upscaler",
             "scale_factor": scale_factor
@@ -207,9 +203,9 @@ with col2:
     ):
         if button_disabled:
             if not api_key:
-                st.warning("Please enter your FAL API key in the sidebar.")
+                st.warning("Please enter your FAL API key to proceed.")
             if input_image is None:
-                st.warning("Upload an image or provide a valid URL to continue.")
+                st.warning("Please upload an image or provide a valid URL.")
         else:
             progress_bar = st.progress(0)
             status_text = st.empty()
@@ -267,7 +263,6 @@ with col2:
 
                 image_info = None
                 if isinstance(result, dict):
-                    # Handle Clarity's direct 'image' key or general 'images' list
                     if "image" in result:
                         image_info = result["image"]
                     elif isinstance(result.get("images"), list) and result["images"]:
@@ -305,10 +300,9 @@ with col2:
 st.markdown("---")
 st.markdown("### 📝 Instructions")
 st.markdown("""
-1. Enter your FAL API key in the sidebar.
-2. Choose your desired upscaler model (`Crystal` for faces, `Clarity` for general use).
-3. Upload an image **or** paste an image URL.
-4. Adjust advanced settings to guide the upscaler.
-5. Review the request summary and click **Upscale Image**.
-6. Download your enhanced result once processing finishes.
-""")
+1. In the **Input Image** column, upload an image **or** paste an image URL.
+2. In the **Configuration** column, enter your FAL API key.
+3. Choose your desired upscaler model (`Crystal` for faces, `Clarity` for general use).
+4. Adjust advanced settings as needed, then click **Upscale Image**.
+5. Your enhanced result will appear below the button once processing finishes.
+""")```
