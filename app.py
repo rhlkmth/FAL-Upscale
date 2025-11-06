@@ -7,7 +7,7 @@ from io import BytesIO
 import base64
 
 # Config and settings
-st.set_page_config(page_title="Image Upscaler", layout="wide")
+st.set_page_config(page_title="AI Image Upscaler", layout="wide")
 
 
 def format_bytes(num_bytes):
@@ -56,7 +56,7 @@ def image_to_data_uri(img):
 # Streamlit UI layout
 st.title("🖼️ AI Image Upscaler")
 
-# Sidebar for API key
+# Sidebar for API key and settings
 with st.sidebar:
     st.header("Settings")
     st.markdown(
@@ -71,12 +71,22 @@ with st.sidebar:
     if api_key:
         os.environ["FAL_KEY"] = api_key
 
+    model_choice = st.selectbox(
+        "Choose Upscaler Model",
+        ["Crystal Upscaler", "Clarity Upscaler"],
+        help="Crystal is great for faces and portraits. Clarity is a general-purpose upscaler."
+    )
+
     # Advanced settings collapsible
     with st.expander("Advanced Settings"):
-        creativity = st.slider("Creativity", 0.0, 1.0, 0.35)
-        resemblance = st.slider("Resemblance", 0.0, 1.0, 0.6)
-        upscale_factor = st.slider("Upscale Factor", 1.0, 4.0, 2.0)
-        prompt = st.text_area("Custom Prompt", "masterpiece, best quality, highres")
+        if model_choice == "Clarity Upscaler":
+            creativity = st.slider("Creativity", 0.0, 1.0, 0.35)
+            resemblance = st.slider("Resemblance", 0.0, 1.0, 0.6)
+            upscale_factor = st.slider("Upscale Factor", 1.0, 4.0, 2.0)
+            prompt = st.text_area("Custom Prompt", "masterpiece, best quality, highres")
+        else:  # Crystal Upscaler
+            scale_factor = st.slider("Scale Factor", 1, 8, 2)
+
 
 # Main content area - two columns
 col1, col2 = st.columns(2)
@@ -150,16 +160,26 @@ with col2:
     st.header("Upscaled Result")
     if input_metadata:
         st.caption(f"Selected image • {describe_image(input_metadata)}")
-    st.caption(
-        f"Creativity: {creativity:.2f} · Resemblance: {resemblance:.2f} · Upscale ×{upscale_factor:.1f}"
-    )
 
-    request_summary = {
-        "prompt": prompt,
-        "creativity": creativity,
-        "resemblance": resemblance,
-        "upscale_factor": upscale_factor,
-    }
+    # Display settings summary and build request
+    request_summary = {}
+    if model_choice == "Clarity Upscaler":
+        st.caption(
+            f"Creativity: {creativity:.2f} · Resemblance: {resemblance:.2f} · Upscale ×{upscale_factor:.1f}"
+        )
+        request_summary = {
+            "model": "Clarity Upscaler",
+            "prompt": prompt,
+            "creativity": creativity,
+            "resemblance": resemblance,
+            "upscale_factor": upscale_factor,
+        }
+    else: # Crystal Upscaler
+        st.caption(f"Scale Factor: ×{scale_factor}")
+        request_summary = {
+            "model": "Crystal Upscaler",
+            "scale_factor": scale_factor
+        }
 
     if input_metadata:
         request_summary["input_image"] = {
@@ -216,9 +236,10 @@ with col2:
                 with st.spinner("Upscaling image..."):
                     image_uri = image_to_data_uri(input_image)
 
-                    result = fal_client.subscribe(
-                        "fal-ai/clarity-upscaler",
-                        arguments={
+                    # Determine model and arguments based on user choice
+                    if model_choice == "Clarity Upscaler":
+                        model_id = "fal-ai/clarity-upscaler"
+                        arguments = {
                             "image_url": image_uri,
                             "prompt": prompt,
                             "creativity": creativity,
@@ -227,7 +248,17 @@ with col2:
                             "enable_safety_checker": False,
                             "guidance_scale": 4,
                             "num_inference_steps": 18,
-                        },
+                        }
+                    else: # Crystal Upscaler
+                        model_id = "fal-ai/crystal-upscaler"
+                        arguments = {
+                            "image_url": image_uri,
+                            "scale_factor": scale_factor,
+                        }
+
+                    result = fal_client.subscribe(
+                        model_id,
+                        arguments=arguments,
                         with_logs=True,
                         on_queue_update=on_queue_update,
                     )
@@ -236,6 +267,7 @@ with col2:
 
                 image_info = None
                 if isinstance(result, dict):
+                    # Handle Clarity's direct 'image' key or general 'images' list
                     if "image" in result:
                         image_info = result["image"]
                     elif isinstance(result.get("images"), list) and result["images"]:
@@ -246,7 +278,7 @@ with col2:
                     response.raise_for_status()
                     output_image = Image.open(BytesIO(response.content))
                     st.image(output_image, caption="Upscaled Result", use_column_width=True)
-                    st.success(f"New Size: {output_image.size}")
+                    st.success(f"New Dimensions: {output_image.size[0]}×{output_image.size[1]}px")
                     status_text.success("Upscaling complete!")
 
                     buf = BytesIO()
@@ -274,8 +306,9 @@ st.markdown("---")
 st.markdown("### 📝 Instructions")
 st.markdown("""
 1. Enter your FAL API key in the sidebar.
-2. Upload an image **or** paste an image URL.
-3. Adjust advanced settings to guide the upscaler.
-4. Review the request summary and click **Upscale Image**.
-5. Download your enhanced result once processing finishes.
+2. Choose your desired upscaler model (`Crystal` for faces, `Clarity` for general use).
+3. Upload an image **or** paste an image URL.
+4. Adjust advanced settings to guide the upscaler.
+5. Review the request summary and click **Upscale Image**.
+6. Download your enhanced result once processing finishes.
 """)
